@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>SuperGlue_ROS</name>
+  <name>superglue_ros</name>
   <version>0.0.0</version>
-  <description>The SuperGlue_ROS package</description>
+  <description>The superglue_ros package</description>
 
   <maintainer email="amadeus.winarto@u.nus.edu">Amadeus Winarto</maintainer>
   <license>MIT</license>
@@ -15,4 +15,7 @@
 
   <depend>image_transport</depend>
   <depend>camera_models</depend>
+
+  <depend>message_generation</depend>
+  <depend>message_runtime</depend>
 </package>
