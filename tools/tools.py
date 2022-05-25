@@ -3,12 +3,12 @@
 import cv2
 import numpy as np
 import torch
-import collections
+
 import matplotlib.cm as cm
 
 
 def image2tensor(frame, device):
-    return torch.from_numpy(frame / 255.).float()[None, None].to(device)
+    return torch.from_numpy(frame / 255.0).float()[None, None].to(device)
 
 
 # --- VISUALIZATION ---
@@ -19,7 +19,7 @@ def plot_keypoints(image, kpts, scores=None):
     if scores is not None:
         # get color
         smin, smax = scores.min(), scores.max()
-        assert (0 <= smin <= 1 and 0 <= smax <= 1)
+        assert 0 <= smin <= 1 and 0 <= smax <= 1
 
         color = cm.gist_rainbow(scores * 0.4)
         color = (np.array(color[:, :3]) * 255).astype(int)[:, ::-1]
@@ -54,8 +54,8 @@ def plot_matches(image0, image1, kpts0, kpts1, scores=None, layout="lr"):
     if layout == "lr":
         H, W = max(H0, H1), W0 + W1
         out = 255 * np.ones((H, W, 3), np.uint8)
-        out[:H0, :W0, :] = np.array(cv2.cvtColor(image0,cv2.COLOR_GRAY2RGB))
-        out[:H1, W0:, :] = np.array(cv2.cvtColor(image1,cv2.COLOR_GRAY2RGB))
+        out[:H0, :W0, :] = np.array(cv2.cvtColor(image0, cv2.COLOR_GRAY2RGB))
+        out[:H1, W0:, :] = np.array(cv2.cvtColor(image1, cv2.COLOR_GRAY2RGB))
     elif layout == "ud":
         H, W = H0 + H1, max(W0, W1)
         out = 255 * np.ones((H, W, 3), np.uint8)
@@ -69,7 +69,7 @@ def plot_matches(image0, image1, kpts0, kpts1, scores=None, layout="lr"):
     # get color
     if scores is not None:
         smin, smax = scores.min(), scores.max()
-        assert (0 <= smin <= 1 and 0 <= smax <= 1)
+        assert 0 <= smin <= 1 and 0 <= smax <= 1
 
         color = cm.gist_rainbow(scores * 0.4)
         color = (np.array(color[:, :3]) * 255).astype(int)[:, ::-1]
@@ -80,12 +80,16 @@ def plot_matches(image0, image1, kpts0, kpts1, scores=None, layout="lr"):
     for (x0, y0), (x1, y1), c in zip(kpts0, kpts1, color):
         c = c.tolist()
         if layout == "lr":
-            cv2.line(out, (x0, y0), (x1 + W0, y1), color=c, thickness=1, lineType=cv2.LINE_AA)
+            cv2.line(
+                out, (x0, y0), (x1 + W0, y1), color=c, thickness=1, lineType=cv2.LINE_AA
+            )
             # display line end-points as circles
             cv2.circle(out, (x0, y0), 2, c, -1, lineType=cv2.LINE_AA)
             cv2.circle(out, (x1 + W0, y1), 2, c, -1, lineType=cv2.LINE_AA)
         elif layout == "ud":
-            cv2.line(out, (x0, y0), (x1, y1 + H0), color=c, thickness=1, lineType=cv2.LINE_AA)
+            cv2.line(
+                out, (x0, y0), (x1, y1 + H0), color=c, thickness=1, lineType=cv2.LINE_AA
+            )
             # display line end-points as circles
             cv2.circle(out, (x0, y0), 2, c, -1, lineType=cv2.LINE_AA)
             cv2.circle(out, (x1, y1 + H0), 2, c, -1, lineType=cv2.LINE_AA)
