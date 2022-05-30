@@ -60,6 +60,7 @@ endif()
 add_message_files(
   FILES
   Keypoint.msg
+  KeypointsDict.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -68,6 +69,7 @@ add_service_files(
   RegisterImage.srv
   ClearBuffer.srv
   MatchImages.srv
+  MatchToTemplate.srv
 )
 
 ## Generate actions in the 'action' folder

@@ -3,19 +3,25 @@ import numpy as np
 import logging
 import copy
 import cv2
+import os
 
 import rospy
 from cv_bridge import CvBridge
 
-from typing import List, Dict, Union
+from typing import Callable, List, Dict, Union
 from wrappers.superglue import SuperGlueMatcher
 from wrappers.superpoint import SuperPointDetector
 
 from sensor_msgs.msg import CompressedImage
-from superglue_ros.msg import Keypoint
+from superglue_ros.msg import Keypoint, KeypointsDict
 from superglue_ros.srv import RegisterImage, RegisterImageRequest, RegisterImageResponse
 from superglue_ros.srv import ClearBuffer, ClearBufferRequest, ClearBufferResponse
 from superglue_ros.srv import MatchImages, MatchImagesRequest, MatchImagesResponse
+from superglue_ros.srv import (
+    MatchToTemplate,
+    MatchToTemplateRequest,
+    MatchToTemplateResponse,
+)
 
 
 class ImageWrapper:
@@ -69,14 +75,20 @@ class MatcherNode:
         self.services: List[rospy.Service] = []
         self.bridge = CvBridge()
 
-        self.detector = SuperPointDetector(detector_config)
-        self.matcher = SuperGlueMatcher(matcher_config)
+        self.detector_config = detector_config
+        self.matcher_config = matcher_config
+
+        self.detector = SuperPointDetector(self.detector_config)
+        self.matcher = SuperGlueMatcher(self.matcher_config)
 
         self.buffer = Buffer()
         self.lock = Lock()
         self.idx = 0
 
-        self.debug_pub = rospy.Publisher("debug", CompressedImage)
+        self.debug_pub = rospy.Publisher("debug", CompressedImage, queue_size=10)
+        self.available_templates = [
+            os.path.join("templates", x) for x in os.listdir("templates")
+        ]
 
         self.offer_services()
 
@@ -89,7 +101,10 @@ class MatcherNode:
             rospy.Service("clearBuffer", ClearBuffer, self.clear_buffer)
         )
         self.services.append(
-            rospy.Service("inferMatches", MatchImages, self.infer_images)
+            rospy.Service("matchImages", MatchImages, self.match_images)
+        )
+        self.services.append(
+            rospy.Service("matchToTemplate", MatchToTemplate, self.match_to_template)
         )
 
     def _get_keypoints(self, id: int):
@@ -162,26 +177,32 @@ class MatcherNode:
                 matches["match_score"],
                 layout="lr",
             )
-            cv2.imshow("MATCHES", img)
-            cv2.waitKey(0)
-
-            debug_img = self.bridge.cv2_to_compressed_imgmsg(img)
-            self.debug_pub.publish(debug_img)
+            cv2.imwrite("test.jpg", img)
         return matches
 
-    def _to_correct_format(self, results: Dict) -> MatchImagesResponse:
-        response = MatchImagesResponse()
+    def _to_correct_format(
+        self,
+        results: Dict,
+        response_creator: Callable[
+            [], Union[MatchImagesResponse, MatchToTemplateResponse]
+        ],
+    ) -> Union[MatchImagesResponse, MatchToTemplateResponse]:
+        response = response_creator()
+        response.keypoints_dict = KeypointsDict()
+
+        response.keypoints_dict.ref_keypoints = []
+        response.keypoints_dict.cur_keypoints = []
 
         for k in results["ref_keypoints"]:
             kp = Keypoint()
             kp.coord = k
-            response.ref_keypoints.append(kp)
+            response.keypoints_dict.ref_keypoints.append(kp)
 
         for k in results["cur_keypoints"]:
             kp = Keypoint()
             kp.coord = k
-            response.cur_keypoints.append(kp)
-        response.match_score = results["match_score"]  # List of floats
+            response.keypoints_dict.cur_keypoints.append(kp)
+        response.keypoints_dict.match_score = results["match_score"]  # List of floats
         return response
 
     def register_img(self, req: RegisterImageRequest) -> RegisterImageResponse:
@@ -190,6 +211,7 @@ class MatcherNode:
             topic_name, CompressedImage, timeout=2
         )
         cv2_img: np.ndarray = self.bridge.compressed_imgmsg_to_cv2(img)
+        cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
         return self._add_img(cv2_img)
 
     def clear_buffer(self, _: ClearBufferRequest) -> ClearBufferResponse:
@@ -201,7 +223,7 @@ class MatcherNode:
             response.result = 0
         return response
 
-    def infer_images(self, request: MatchImagesRequest) -> MatchImagesResponse:
+    def match_images(self, request: MatchImagesRequest) -> MatchImagesResponse:
         num_keypoints = request.numKeypoints
         if num_keypoints <= 0:
             resp = MatchImagesResponse()
@@ -209,23 +231,47 @@ class MatcherNode:
             return resp
 
         results = self._infer_matches(num_keypoints)
-        return self._to_correct_format(results)
+        return self._to_correct_format(results, lambda: MatchImagesResponse())  # type: ignore
+
+    def match_to_template(
+        self, request: MatchToTemplateRequest
+    ) -> MatchToTemplateResponse:
+        num_keypoints = request.numKeypoints
+        template_name = request.template_name
+
+        relevant_templates = sorted(
+            list(filter(lambda x: template_name in x, self.available_templates))
+        )
+        if num_keypoints <= 0 or len(relevant_templates) <= 0:
+            resp = MatchToTemplateResponse()
+            resp.result = 1
+            return resp
+
+        relevant_template_path = relevant_templates[0]
+        cv2_img: np.ndarray = cv2.imread(relevant_template_path)
+        cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
+        self._add_img(cv2_img)
+
+        results = self._infer_matches(num_keypoints)
+        return self._to_correct_format(results, lambda: MatchToTemplateResponse())  # type: ignore
 
     @staticmethod
     def threaded_test():
         import cv2
 
         matcher_node = MatcherNode()
-        img1 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/img1.jpg")
+        img1 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/left_sim.jpg")
+        img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
         resp1 = matcher_node._add_img(img1)
         print("Result1 : ", resp1.result)
 
-        img2 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/img2.jpg")
+        img2 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/template.jpeg")
+        img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
         matcher_node._add_img(img2)
 
         assert len(matcher_node.buffer) == 2
 
-        matches = matcher_node._infer_matches(10)
+        matches = matcher_node._infer_matches(500)
 
         from tools.tools import plot_matches
 
@@ -241,9 +287,47 @@ class MatcherNode:
         cv2.imshow("MATCHES", img)
         cv2.waitKey(0)
 
+    @staticmethod
+    def threaded_test2():
+        import cv2
+
+        matcher_node = MatcherNode()
+        img1 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/left_sim.jpg")
+        img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
+        resp1 = matcher_node._add_img(img1)
+        print("Result1 : ", resp1.result)
+
+        assert len(matcher_node.buffer) == 1
+
+        img2 = cv2.imread(
+            "/home/amadeus/bbauv/src/SuperGlue_ROS/templates/template.jpeg"
+        )
+
+        sample_req = MatchToTemplateRequest()
+        sample_req.template_name = "template"
+        sample_req.numKeypoints = 500
+
+        resp = matcher_node.match_to_template(sample_req)
+
+        from tools.tools import plot_matches
+
+        img = plot_matches(
+            cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY),
+            cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY),
+            [[x.coord[0], x.coord[1]] for x in resp.keypoints_dict.ref_keypoints],
+            [[x.coord[0], x.coord[1]] for x in resp.keypoints_dict.cur_keypoints],
+            resp.keypoints_dict.match_score,
+            layout="lr",
+        )
+
+        cv2.imshow("MATCHES", img)
+        cv2.waitKey(0)
+
 
 if __name__ == "__main__":
-    # MatcherNode.threaded_test()
-    matcher_node = MatcherNode()
+    # MatcherNode.threaded_test2()
+    matcher_node = MatcherNode(
+        detector_config={"cuda": False}, matcher_config={"cuda": False}
+    )
     print("RUNNING")
     rospy.spin()

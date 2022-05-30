@@ -1,4 +1,5 @@
 int64 numKeypoints
+string template_name
 
 ---
 int64 result
