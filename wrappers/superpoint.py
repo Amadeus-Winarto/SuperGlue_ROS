@@ -36,8 +36,8 @@ class SuperPointDetector(object):
             "cuda" if torch.cuda.is_available() and self.config["cuda"] else "cpu"
         )
 
-        logging.info("creating SuperPoint detector...")
-        self.superpoint = SuperPoint(self.config).to(self.device)
+        logging.info("Creating SuperPoint detector...")
+        self.superpoint = SuperPoint(self.config).eval().to(self.device)
 
     def __call__(self, image) -> Dict:
         try:
@@ -49,7 +49,9 @@ class SuperPointDetector(object):
 
         logging.debug("detecting keypoints with superpoint...")
         image_tensor = image2tensor(image, self.device)
-        pred = self.superpoint({"image": image_tensor})
+
+        with torch.no_grad():
+            pred = self.superpoint({"image": image_tensor})
 
         ret_dict = {
             "image_size": np.array([image.shape[0], image.shape[1]]),

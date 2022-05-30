@@ -41,7 +41,7 @@ class SuperGlueMatcher:
         self.config["path"] = path_
 
         logging.info("creating SuperGlue matcher...")
-        self.superglue = SuperGlue(self.config).to(self.device)
+        self.superglue = SuperGlue(self.config).eval().to(self.device)
 
     def preprocess(self, kptdescs: Dict) -> Dict:
         logging.info("Prepare input data for superglue...")
@@ -110,7 +110,8 @@ class SuperGlueMatcher:
 
     def forward(self, data) -> Dict:
         logging.info("Matching keypoints with superglue...")
-        pred: Dict = self.superglue(data)
+        with torch.no_grad():
+            pred: Dict = self.superglue(data)
         return pred
 
     def postprocess(self, pred: Dict, kptdescs: Dict, num_keypoints: int) -> Dict:
