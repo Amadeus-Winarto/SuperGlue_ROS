@@ -97,7 +97,7 @@ class MatcherNode:
         self.lock = Lock()
         self.idx = 0
 
-        self.debug_pub = rospy.Publisher("debug", CompressedImage, queue_size=10)
+        self.debug = True
         self.available_templates = [
             os.path.join("templates", x) for x in os.listdir("templates")
         ]
@@ -175,7 +175,7 @@ class MatcherNode:
         content2 = self.buffer.buffer.pop(0)
         self.buffer.lock.release()
 
-        if self.debug_pub is not None:
+        if self.debug:
             img1 = content1.img
             img2 = content2.img
 
@@ -251,6 +251,11 @@ class MatcherNode:
     ) -> MatchToTemplateResponse:
         num_keypoints = request.numKeypoints
         template_name = request.template_name
+        if template_name == "":
+            raise ValueError("template_name is empty!")
+
+        print(num_keypoints)
+        print(template_name)
 
         relevant_templates = sorted(
             list(filter(lambda x: template_name in x, self.available_templates))
@@ -261,6 +266,7 @@ class MatcherNode:
             return resp
 
         relevant_template_path = relevant_templates[0]
+        print(f"Using {relevant_template_path}")
         cv2_img: np.ndarray = cv2.imread(relevant_template_path)
         cv2_img = white_balance(cv2_img)
         cv2.imwrite("/home/amadeus/bbauv/src/stereo/imgs/template.jpg", cv2_img)
@@ -275,12 +281,12 @@ class MatcherNode:
         import cv2
 
         matcher_node = MatcherNode()
-        img1 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/left_sim.jpg")
+        img1 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/current.jpg")
         img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
         resp1 = matcher_node._add_img(img1)
         print("Result1 : ", resp1.result)
 
-        img2 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/template.jpeg")
+        img2 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/template.jpg")
         img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
         matcher_node._add_img(img2)
 
