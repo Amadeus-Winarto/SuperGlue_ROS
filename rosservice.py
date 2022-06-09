@@ -24,6 +24,18 @@ from superglue_ros.srv import (
 )
 
 
+def white_balance(img):
+    result = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    avg_a = np.average(result[:, :, 1])
+    avg_b = np.average(result[:, :, 2])
+    result[:, :, 1] = result[:, :, 1] - (
+        (avg_a - 128) * (result[:, :, 0] / 255.0) * 1.1
+    )
+    result[:, :, 2] = result[:, :, 2] - (
+        (avg_b - 128) * (result[:, :, 0] / 255.0) * 1.1
+    )
+    result = cv2.cvtColor(result, cv2.COLOR_LAB2BGR)
+    return result
 class ImageWrapper:
     def __init__(self, id: int, img: np.ndarray) -> None:
         self.id = id
@@ -211,7 +223,8 @@ class MatcherNode:
             topic_name, CompressedImage, timeout=2
         )
         cv2_img: np.ndarray = self.bridge.compressed_imgmsg_to_cv2(img)
-        cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
+        cv2_img = white_balance(cv2_img)
+        cv2.imwrite("/home/amadeus/bbauv/src/stereo/imgs/current.jpg", cv2_img)
         return self._add_img(cv2_img)
 
     def clear_buffer(self, _: ClearBufferRequest) -> ClearBufferResponse:
@@ -249,7 +262,9 @@ class MatcherNode:
 
         relevant_template_path = relevant_templates[0]
         cv2_img: np.ndarray = cv2.imread(relevant_template_path)
-        cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
+        cv2_img = white_balance(cv2_img)
+        cv2.imwrite("/home/amadeus/bbauv/src/stereo/imgs/template.jpg", cv2_img)
+
         self._add_img(cv2_img)
 
         results = self._infer_matches(num_keypoints)
