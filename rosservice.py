@@ -1,3 +1,4 @@
+from scipy.spatial.transform import Rotation as Rlib
 from threading import Thread, Lock
 import numpy as np
 import logging
@@ -36,6 +37,28 @@ def white_balance(img):
     )
     result = cv2.cvtColor(result, cv2.COLOR_LAB2BGR)
     return result
+
+
+def get_camera_matrix():
+    SIM_K = np.array(
+        [
+            [407.0646129842357, 0.0, 384.5],
+            [0.0, 407.0646129842357, 246.5],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+
+    REAL_K = np.array(
+        [
+            [436.40875244140625, 0.0, 510.88065980075044],
+            [0.0, 467.6256103515625, 376.3738157469634],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+
+    return SIM_K
+
+
 class ImageWrapper:
     def __init__(self, id: int, img: np.ndarray) -> None:
         self.id = id
@@ -274,6 +297,61 @@ class MatcherNode:
         self._add_img(cv2_img)
 
         results = self._infer_matches(num_keypoints)
+
+        from tools.tools import plot_matches
+
+        img1 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/current.jpg")
+        img2 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/template.jpg")
+
+        img = plot_matches(
+            cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY),
+            cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY),
+            results["ref_keypoints"][0:200],
+            results["cur_keypoints"][0:200],
+            results["match_score"][0:200],
+            layout="lr",
+        )
+
+        cv2.imwrite("/home/amadeus/bbauv/src/stereo/imgs/debug_matches_py.jpg", img)
+
+        # Do Homography here
+        print("Homography")
+        kp1 = results["ref_keypoints"]
+        kp2 = results["cur_keypoints"]
+
+        pts1 = np.int32(np.array(kp1))
+        pts2 = np.int32(np.array(kp2))
+
+        M, _ = cv2.findHomography(pts2, pts1, cv2.RANSAC, 5.0)
+        print(M)
+
+        h, w, _ = img2.shape
+        pts = np.float32([[1, 1], [w - 1, 1], [w - 1, h - 1], [1, h - 1]]).reshape(
+            -1, 1, 2
+        )
+        dst = cv2.perspectiveTransform(pts, M)
+        img_lines = cv2.polylines(img1, [np.int32(dst)], True, 255, 3, cv2.LINE_AA)
+        cv2.imwrite(
+            "/home/amadeus/bbauv/src/stereo/imgs/debug_keypoints_py.jpg", img_lines
+        )
+
+        _, Rs, Ts, Ns = cv2.decomposeHomographyMat(
+            np.linalg.inv(M), get_camera_matrix()
+        )
+
+        for i in range(len(Rs)):
+
+            if Ns[i].T.dot(np.array([[0], [0], [1]]))[0][0] < 0:
+                print(i)
+                print(
+                    "YPR : (deg.)",
+                    -1 * Rlib.from_matrix(Rs[i]).as_euler("yxz", degrees=True),
+                )
+                print("Translation", Ts[i][:, 0])
+                print("Normal", Ns[i][:, 0])
+
+        print()
+
         return self._to_correct_format(results, lambda: MatchToTemplateResponse())  # type: ignore
 
     @staticmethod
