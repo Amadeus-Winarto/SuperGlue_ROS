@@ -57,7 +57,7 @@ def get_camera_matrix():
         ]
     )
 
-    return SIM_K
+    return REAL_K
 
 
 class ImageWrapper:
@@ -122,8 +122,11 @@ class MatcherNode:
         self.idx = 0
 
         self.debug = True
+        self.path = os.path.dirname(os.path.abspath(__file__))\
+
+        template_path = os.path.join(self.path, "templates")
         self.available_templates = [
-            os.path.join("templates", x) for x in os.listdir("templates")
+            os.path.join(template_path, x) for x in os.listdir(template_path)
         ]
 
         self.offer_services()
