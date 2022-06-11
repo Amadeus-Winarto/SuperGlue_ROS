@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from scipy.spatial.transform import Rotation as Rlib
 from threading import Thread, Lock
 import numpy as np
@@ -354,77 +355,8 @@ class MatcherNode:
 
         return self._to_correct_format(results, lambda: MatchToTemplateResponse())  # type: ignore
 
-    @staticmethod
-    def threaded_test():
-        import cv2
-
-        matcher_node = MatcherNode()
-        img1 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/current.jpg")
-        img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
-        resp1 = matcher_node._add_img(img1)
-        print("Result1 : ", resp1.result)
-
-        img2 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/template.jpg")
-        img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
-        matcher_node._add_img(img2)
-
-        assert len(matcher_node.buffer) == 2
-
-        matches = matcher_node._infer_matches(500)
-
-        from tools.tools import plot_matches
-
-        img = plot_matches(
-            cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY),
-            cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY),
-            matches["ref_keypoints"][0:200],
-            matches["cur_keypoints"][0:200],
-            matches["match_score"][0:200],
-            layout="lr",
-        )
-
-        cv2.imshow("MATCHES", img)
-        cv2.waitKey(0)
-
-    @staticmethod
-    def threaded_test2():
-        import cv2
-
-        matcher_node = MatcherNode()
-        img1 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/current.jpg")
-        img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
-        resp1 = matcher_node._add_img(img1)
-        print("Result1 : ", resp1.result)
-
-        assert len(matcher_node.buffer) == 1
-
-        img2 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/template.jpg")
-
-        sample_req = MatchToTemplateRequest()
-        sample_req.template_name = "template"
-        sample_req.numKeypoints = 500
-
-        resp = matcher_node.match_to_template(sample_req)
-
-        from tools.tools import plot_matches
-
-        img = plot_matches(
-            cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY),
-            cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY),
-            [[x.coord[0], x.coord[1]] for x in resp.keypoints_dict.ref_keypoints],
-            [[x.coord[0], x.coord[1]] for x in resp.keypoints_dict.cur_keypoints],
-            resp.keypoints_dict.match_score,
-            layout="lr",
-        )
-
-        cv2.imshow("MATCHES", img)
-        cv2.waitKey(0)
-
 
 if __name__ == "__main__":
-    MatcherNode.threaded_test()
-    # matcher_node = MatcherNode(
-    #     detector_config={"cuda": False}, matcher_config={"cuda": False}
-    # )
-    # print("RUNNING")
-    # rospy.spin()
+    matcher_node = MatcherNode()
+    print("RUNNING")
+    rospy.spin()
