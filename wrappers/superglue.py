@@ -40,6 +40,16 @@ class SuperGlueMatcher:
         )
         self.config["path"] = path_
 
+        parent_dir = os.path.dirname(path_)
+        ref_file = os.path.basename(path_).split(".")[0]
+        ts_file = os.path.join(parent_dir, ref_file + ".zip")
+
+        logging.info("Creating SuperGlue matcher...")
+        if os.path.isfile(ts_file):
+            self.superpoint = torch.jit.load(ts_file).eval().to(self.device)
+        else:
+            self.superpoint = SuperGlue(self.config).eval().to(self.device)
+
         logging.info("creating SuperGlue matcher...")
         self.superglue = SuperGlue(self.config).eval().to(self.device)
 
@@ -52,6 +62,9 @@ class SuperGlueMatcher:
         data["image_size1"] = (
             torch.from_numpy(kptdescs["cur"]["image_size"]).float().to(self.device)
         )
+
+        # print(data["image_size0"])
+        # raise NotImplementedError
 
         if "torch" in kptdescs["cur"]:
             data["scores0"] = kptdescs["ref"]["torch"]["scores"][0].unsqueeze(0)

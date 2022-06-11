@@ -19,7 +19,7 @@ class SuperPointDetector(object):
         "max_keypoints": -1,
         "remove_borders": 4,
         "path": os.path.abspath(os.path.join(__file__, "../.."))
-        + "/models/SuperPointPretrainedNetwork/superpoint_v1.pth",
+        + "/models/SuperGluePretrainedNetwork/models/weights/superpoint_v1.pth",
         "cuda": True,
     }
 
@@ -35,9 +35,16 @@ class SuperPointDetector(object):
         self.device = (
             "cuda" if torch.cuda.is_available() and self.config["cuda"] else "cpu"
         )
+        path_ = self.config["path"]
+        parent_dir = os.path.dirname(path_)
+        ref_file = os.path.basename(path_).split(".")[0]
+        ts_file = os.path.join(parent_dir, ref_file + ".zip")
 
         logging.info("Creating SuperPoint detector...")
-        self.superpoint = SuperPoint(self.config).eval().to(self.device)
+        if os.path.isfile(ts_file):
+            self.superpoint = torch.jit.load(ts_file).eval().to(self.device)
+        else:
+            self.superpoint = SuperPoint(self.config).eval().to(self.device)
 
     def __call__(self, image) -> Dict:
         try:
@@ -51,7 +58,7 @@ class SuperPointDetector(object):
         image_tensor = image2tensor(image, self.device)
 
         with torch.no_grad():
-            pred = self.superpoint({"image": image_tensor})
+            pred = self.superpoint(image_tensor)
 
         ret_dict = {
             "image_size": np.array([image.shape[0], image.shape[1]]),
