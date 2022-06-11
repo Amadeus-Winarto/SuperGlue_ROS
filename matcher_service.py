@@ -103,6 +103,7 @@ class MatcherNode:
 
     def __init__(
         self,
+        is_debug=False,
         node_name="superglue_matcher",
         detector_config: Union[Dict, None] = None,
         matcher_config: Union[Dict, None] = None,
@@ -121,8 +122,12 @@ class MatcherNode:
         self.lock = Lock()
         self.idx = 0
 
-        self.debug = True
-        self.path = os.path.dirname(os.path.abspath(__file__))\
+        self.path = os.path.dirname(os.path.abspath(__file__))
+        self.debug = is_debug
+        if is_debug:
+            self.debug_path = os.path.join(self.path, "debug")
+            if not os.path.isdir(self.debug_path):
+                os.mkdir(self.debug_path)
 
         template_path = os.path.join(self.path, "templates")
         self.available_templates = [
@@ -216,7 +221,7 @@ class MatcherNode:
                 matches["match_score"],
                 layout="lr",
             )
-            cv2.imwrite("test.jpg", img)
+            cv2.imwrite(os.path.join(self.debug_path, "test.jpg"), img)
         return matches
 
     def _to_correct_format(
@@ -251,7 +256,7 @@ class MatcherNode:
         )
         cv2_img: np.ndarray = self.bridge.compressed_imgmsg_to_cv2(img)
         cv2_img = white_balance(cv2_img)
-        cv2.imwrite("/home/amadeus/bbauv/src/stereo/imgs/current.jpg", cv2_img)
+        cv2.imwrite(os.path.join(self.debug_path, "current.jpg"), cv2_img)
         return self._add_img(cv2_img)
 
     def clear_buffer(self, _: ClearBufferRequest) -> ClearBufferResponse:
@@ -296,70 +301,73 @@ class MatcherNode:
         print(f"Using {relevant_template_path}")
         cv2_img: np.ndarray = cv2.imread(relevant_template_path)
         cv2_img = white_balance(cv2_img)
-        cv2.imwrite("/home/amadeus/bbauv/src/stereo/imgs/template.jpg", cv2_img)
+        if self.debug:
+            cv2.imwrite(os.path.join(self.debug_path, "template.jpg"), cv2_img)
 
         self._add_img(cv2_img)
 
         results = self._infer_matches(num_keypoints)
 
-        from tools.tools import plot_matches
+        if self.debug:
+            from tools.tools import plot_matches
 
-        img1 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/current.jpg")
-        img2 = cv2.imread("/home/amadeus/bbauv/src/stereo/imgs/template.jpg")
+            img1 = cv2.imread(os.path.join(self.debug_path, "current.jpg"))
+            img2 = cv2.imread(os.path.join(self.debug_path, "template.jpg"))
 
-        img = plot_matches(
-            cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY),
-            cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY),
-            results["ref_keypoints"][0:200],
-            results["cur_keypoints"][0:200],
-            results["match_score"][0:200],
-            layout="lr",
-        )
+            img = plot_matches(
+                cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY),
+                cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY),
+                results["ref_keypoints"][0:200],
+                results["cur_keypoints"][0:200],
+                results["match_score"][0:200],
+                layout="lr",
+            )
 
-        cv2.imwrite("/home/amadeus/bbauv/src/stereo/imgs/debug_matches_py.jpg", img)
+            cv2.imwrite(os.path.join(self.debug_path, "debug_matches_py.jpg"), img)
 
-        # Do Homography here
-        print("Homography")
-        kp1 = results["ref_keypoints"]
-        kp2 = results["cur_keypoints"]
+            # Do Homography here
+            print("Homography")
+            kp1 = results["ref_keypoints"]
+            kp2 = results["cur_keypoints"]
 
-        pts1 = np.int32(np.array(kp1))
-        pts2 = np.int32(np.array(kp2))
+            pts1 = np.int32(np.array(kp1))
+            pts2 = np.int32(np.array(kp2))
 
-        M, _ = cv2.findHomography(pts2, pts1, cv2.RANSAC, 5.0)
-        print(M)
+            M, _ = cv2.findHomography(pts2, pts1, cv2.RANSAC, 5.0)
+            print(M)
 
-        h, w, _ = img2.shape
-        pts = np.float32([[1, 1], [w - 1, 1], [w - 1, h - 1], [1, h - 1]]).reshape(
-            -1, 1, 2
-        )
-        dst = cv2.perspectiveTransform(pts, M)
-        img_lines = cv2.polylines(img1, [np.int32(dst)], True, 255, 3, cv2.LINE_AA)
-        cv2.imwrite(
-            "/home/amadeus/bbauv/src/stereo/imgs/debug_keypoints_py.jpg", img_lines
-        )
+            h, w, _ = img2.shape
+            pts = np.float32([[1, 1], [w - 1, 1], [w - 1, h - 1], [1, h - 1]]).reshape(
+                -1, 1, 2
+            )
+            dst = cv2.perspectiveTransform(pts, M)
+            img_lines = cv2.polylines(img1, [np.int32(dst)], True, 255, 3, cv2.LINE_AA)
+            cv2.imwrite(
+                os.path.join(self.debug_path, "debug_keypoints_py.jpg"), img_lines
+            )
 
-        _, Rs, Ts, Ns = cv2.decomposeHomographyMat(
-            np.linalg.inv(M), get_camera_matrix()
-        )
+            _, Rs, Ts, Ns = cv2.decomposeHomographyMat(
+                np.linalg.inv(M), get_camera_matrix()
+            )
 
-        for i in range(len(Rs)):
+            for i in range(len(Rs)):
 
-            if Ns[i].T.dot(np.array([[0], [0], [1]]))[0][0] < 0:
-                print(i)
-                print(
-                    "YPR : (deg.)",
-                    -1 * Rlib.from_matrix(Rs[i]).as_euler("yxz", degrees=True),
-                )
-                print("Translation", Ts[i][:, 0])
-                print("Normal", Ns[i][:, 0])
+                if Ns[i].T.dot(np.array([[0], [0], [1]]))[0][0] < 0:
+                    print(i)
+                    print(
+                        "YPR : (deg.)",
+                        -1 * Rlib.from_matrix(Rs[i]).as_euler("yxz", degrees=True),
+                    )
+                    print("Translation", Ts[i][:, 0])
+                    print("Normal", Ns[i][:, 0])
 
-        print()
+            print()
 
         return self._to_correct_format(results, lambda: MatchToTemplateResponse())  # type: ignore
 
 
 if __name__ == "__main__":
-    matcher_node = MatcherNode()
+    DEBUG_MODE = True
+    matcher_node = MatcherNode(DEBUG_MODE)
     print("RUNNING")
     rospy.spin()
