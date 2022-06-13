@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
+import time
 from scipy.spatial.transform import Rotation as Rlib
-from threading import Thread, Lock
 import numpy as np
 import logging
-import copy
 import cv2
 import os
 
@@ -140,10 +139,16 @@ class MatcherNode:
         img2 = self.buffer[1]
 
         # Get Keypoints
+        start = time.time()
         keypoints = self.detector.pairwise(img1, img2)
+        end = time.time()
+        print("Time taken for detector: ", end - start)
 
         # Get Matches
+        start = time.time()
         matches = self.matcher(keypoints, num_keypoints)
+        end = time.time()
+        print("Time taken for matcher: ", end - start)
 
         self.buffer = []
 

@@ -3,6 +3,7 @@ from scipy.spatial.transform import Rotation as Rlib
 from threading import Thread, Lock
 import numpy as np
 import logging
+import time
 import copy
 import cv2
 import os
@@ -167,7 +168,10 @@ class MatcherNode:
             img = copy.deepcopy(relevant[0].img)
             self.buffer.lock.release()
 
+        start = time.time()
         kp = self.detector(img)
+        end = time.time()
+        print("Time taken for detector: ", end - start)
 
         self.buffer.lock.acquire()
         for x in self.buffer.buffer:
@@ -206,7 +210,10 @@ class MatcherNode:
         content2.thread.join()  # type: ignore
 
         keypoints = {"ref": content1.results, "cur": content2.results}
+        start = time.time()
         matches = self.matcher(keypoints, num_keypoints)
+        end = time.time()
+        print("Time taken for matcher: ", end - start)
 
         self.buffer.lock.acquire()
         content1 = self.buffer.buffer.pop(0)
