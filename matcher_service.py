@@ -141,7 +141,11 @@ class MatcherNode:
             os.path.join(template_path, x) for x in os.listdir(template_path)
         ]
 
+        print("Warming up models")
+        self.warmup()
+
         self.offer_services()
+        print("Services offered!")
 
     def offer_services(self):
         # Add the services here
@@ -171,7 +175,8 @@ class MatcherNode:
         start = time.time()
         kp = self.detector(img)
         end = time.time()
-        print("Time taken for detector: ", end - start)
+        if self.debug:
+            print("Time taken for detector: ", end - start)
 
         self.buffer.lock.acquire()
         for x in self.buffer.buffer:
@@ -213,7 +218,8 @@ class MatcherNode:
         start = time.time()
         matches = self.matcher(keypoints, num_keypoints)
         end = time.time()
-        print("Time taken for matcher: ", end - start)
+        if self.debug:
+            print("Time taken for matcher: ", end - start)
 
         self.buffer.lock.acquire()
         content1 = self.buffer.buffer.pop(0)
@@ -339,48 +345,64 @@ class MatcherNode:
             cv2.imwrite(os.path.join(self.debug_path, "debug_matches_py.jpg"), img)
 
             # Do Homography here
-            print("Homography")
-            kp1 = results["ref_keypoints"]
-            kp2 = results["cur_keypoints"]
+            # print("Homography")
+            # kp1 = results["ref_keypoints"]
+            # kp2 = results["cur_keypoints"]
 
-            pts1 = np.int32(np.array(kp1))
-            pts2 = np.int32(np.array(kp2))
+            # pts1 = np.int32(np.array(kp1))
+            # pts2 = np.int32(np.array(kp2))
 
-            M, _ = cv2.findHomography(pts2, pts1, cv2.RANSAC, 5.0)
-            print(M)
+            # M, _ = cv2.findHomography(pts2, pts1, cv2.RANSAC, 5.0)
+            # print(M)
 
-            h, w, _ = img2.shape
-            pts = np.float32([[1, 1], [w - 1, 1], [w - 1, h - 1], [1, h - 1]]).reshape(
-                -1, 1, 2
-            )
-            dst = cv2.perspectiveTransform(pts, M)
-            img_lines = cv2.polylines(img1, [np.int32(dst)], True, 255, 3, cv2.LINE_AA)
-            cv2.imwrite(
-                os.path.join(self.debug_path, "debug_keypoints_py.jpg"), img_lines
-            )
+            # h, w, _ = img2.shape
+            # pts = np.float32([[1, 1], [w - 1, 1], [w - 1, h - 1], [1, h - 1]]).reshape(
+            #     -1, 1, 2
+            # )
+            # dst = cv2.perspectiveTransform(pts, M)
+            # img_lines = cv2.polylines(img1, [np.int32(dst)], True, 255, 3, cv2.LINE_AA)
+            # cv2.imwrite(
+            #     os.path.join(self.debug_path, "debug_keypoints_py.jpg"), img_lines
+            # )
 
-            _, Rs, Ts, Ns = cv2.decomposeHomographyMat(
-                np.linalg.inv(M), get_camera_matrix()
-            )
+            # _, Rs, Ts, Ns = cv2.decomposeHomographyMat(
+            #     np.linalg.inv(M), get_camera_matrix()
+            # )
 
-            for i in range(len(Rs)):
+            # for i in range(len(Rs)):
 
-                if Ns[i].T.dot(np.array([[0], [0], [1]]))[0][0] < 0:
-                    print(i)
-                    print(
-                        "YPR : (deg.)",
-                        -1 * Rlib.from_matrix(Rs[i]).as_euler("yxz", degrees=True),
-                    )
-                    print("Translation", Ts[i][:, 0])
-                    print("Normal", Ns[i][:, 0])
+            #     if Ns[i].T.dot(np.array([[0], [0], [1]]))[0][0] < 0:
+            #         print(i)
+            #         print(
+            #             "YPR : (deg.)",
+            #             -1 * Rlib.from_matrix(Rs[i]).as_euler("yxz", degrees=True),
+            #         )
+            #         print("Translation", Ts[i][:, 0])
+            #         print("Normal", Ns[i][:, 0])
 
-            print()
+            # print()
 
         return self._to_correct_format(results, lambda: MatchToTemplateResponse())  # type: ignore
+
+    def warmup(self):
+        debug_state = self.debug
+        self.debug = False
+
+        for _ in range(10):
+            cv2_img: np.ndarray = np.random.rand(720, 640, 3).astype(np.float32)
+            cv2_img = white_balance(cv2_img)
+            self._add_img(cv2_img)
+
+            cv2_img: np.ndarray = np.random.rand(720, 640, 3).astype(np.float32)
+            cv2_img = white_balance(cv2_img)
+            self._add_img(cv2_img)
+
+            self._infer_matches(1000)
+
+        self.debug = debug_state
 
 
 if __name__ == "__main__":
     DEBUG_MODE = True
     matcher_node = MatcherNode(DEBUG_MODE)
-    print("RUNNING")
     rospy.spin()
