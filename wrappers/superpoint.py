@@ -41,7 +41,7 @@ class SuperPointDetector(object):
         ts_file = os.path.join(parent_dir, ref_file + ".zip")
 
         logging.info("Creating SuperPoint detector...")
-        if os.path.isfile(ts_file):
+        if False:  # os.path.isfile(ts_file):
             self.superpoint = torch.jit.load(ts_file).eval().to(self.device)
         else:
             self.superpoint = SuperPoint(self.config).eval().to(self.device)
@@ -84,9 +84,23 @@ class SuperPointDetector(object):
             "ref": {
                 "image_size": np.array([image1.shape[0], image1.shape[1]]),
                 "torch": pred1,
+                "keypoints": pred1["keypoints"][0].cpu().detach().numpy(),
+                "scores": pred1["scores"][0].cpu().detach().numpy(),
+                "descriptors": pred1["descriptors"][0]
+                .cpu()
+                .detach()
+                .numpy()
+                .transpose(),
             },
             "cur": {
                 "image_size": np.array([image2.shape[0], image2.shape[1]]),
                 "torch": pred2,
+                "keypoints": pred2["keypoints"][0].cpu().detach().numpy(),
+                "scores": pred2["scores"][0].cpu().detach().numpy(),
+                "descriptors": pred2["descriptors"][0]
+                .cpu()
+                .detach()
+                .numpy()
+                .transpose(),
             },
         }

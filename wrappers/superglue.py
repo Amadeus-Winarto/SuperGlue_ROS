@@ -45,7 +45,7 @@ class SuperGlueMatcher:
         ts_file = os.path.join(parent_dir, ref_file + ".zip")
 
         logging.info("Creating SuperGlue matcher...")
-        if os.path.isfile(ts_file):
+        if False: # os.path.isfile(ts_file):
             self.superglue = torch.jit.load(ts_file).eval().to(self.device)
         else:
             self.superglue = SuperGlue(self.config).eval().to(self.device)
