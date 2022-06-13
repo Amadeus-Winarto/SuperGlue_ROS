@@ -46,7 +46,7 @@ class SuperPointDetector(object):
         else:
             self.superpoint = SuperPoint(self.config).eval().to(self.device)
 
-    def __call__(self, image) -> Dict:
+    def preprocess(self, image) -> torch.Tensor:
         try:
             if image.shape[2] == 3:
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -56,9 +56,11 @@ class SuperPointDetector(object):
 
         logging.debug("detecting keypoints with superpoint...")
         image_tensor = image2tensor(image, self.device)
+        return image_tensor
 
+    def __call__(self, image) -> Dict:
         with torch.no_grad():
-            pred = self.superpoint(image_tensor)
+            pred = self.superpoint(self.preprocess(image))
 
         ret_dict = {
             "image_size": np.array([image.shape[0], image.shape[1]]),
@@ -69,3 +71,22 @@ class SuperPointDetector(object):
         }
 
         return ret_dict
+
+    def pairwise(self, image1, image2) -> Dict:
+        image_tensor1 = self.preprocess(image1)
+        image_tensor2 = self.preprocess(image2)
+
+        with torch.no_grad():
+            pred1 = self.superpoint(image_tensor1)  # type: ignore
+            pred2 = self.superpoint(image_tensor2)  # type: ignore
+
+        return {
+            "ref": {
+                "image_size": np.array([image1.shape[0], image1.shape[1]]),
+                "torch": pred1,
+            },
+            "cur": {
+                "image_size": np.array([image2.shape[0], image2.shape[1]]),
+                "torch": pred2,
+            },
+        }

@@ -46,12 +46,9 @@ class SuperGlueMatcher:
 
         logging.info("Creating SuperGlue matcher...")
         if os.path.isfile(ts_file):
-            self.superpoint = torch.jit.load(ts_file).eval().to(self.device)
+            self.superglue = torch.jit.load(ts_file).eval().to(self.device)
         else:
-            self.superpoint = SuperGlue(self.config).eval().to(self.device)
-
-        logging.info("creating SuperGlue matcher...")
-        self.superglue = SuperGlue(self.config).eval().to(self.device)
+            self.superglue = SuperGlue(self.config).eval().to(self.device)
 
     def preprocess(self, kptdescs: Dict) -> Dict:
         logging.info("Prepare input data for superglue...")
@@ -139,7 +136,7 @@ class SuperGlueMatcher:
         match_conf = []
         for i, (m, c) in enumerate(zip(matches, confidence)):
             match_conf.append([i, m, c])
-        match_conf = sorted(match_conf, key=lambda x: x[2], reverse=True)
+        match_conf = sorted(match_conf, key=lambda x: -x[2])
 
         valid = [[x[0], x[1]] for x in match_conf if x[1] > -1]
         v0 = [x[0] for x in valid]

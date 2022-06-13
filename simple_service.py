@@ -61,42 +61,6 @@ def get_camera_matrix():
     return SIM_K
 
 
-class ImageWrapper:
-    def __init__(self, id: int, img: np.ndarray) -> None:
-        self.id = id
-        self.img = img
-        self.thread = None
-        self.results = None
-
-    def register_thread(self, thread: Thread):
-        self.thread = thread
-
-    def add_results(self, results: Dict):
-        self.results = results
-
-
-class Buffer:
-    def __init__(self) -> None:
-        self.buffer: List[ImageWrapper] = []
-        self.lock = Lock()
-
-    def append(self, x) -> None:
-        self.lock.acquire()
-        self.buffer.append(x)
-        self.lock.release()
-
-    def clear(self) -> None:
-        self.lock.acquire()
-        self.buffer = []
-        self.lock.release()
-
-    def __len__(self) -> int:
-        self.lock.acquire()
-        length = len(self.buffer)
-        self.lock.release()
-        return length
-
-
 class MatcherNode:
     """
     ROSWrapper to offer matching services
@@ -124,8 +88,7 @@ class MatcherNode:
         else:
             self.matcher = BfMatcher(self.matcher_config)
 
-        self.buffer = Buffer()
-        self.lock = Lock()
+        self.buffer = []
         self.idx = 0
 
         self.path = os.path.dirname(os.path.abspath(__file__))
@@ -157,36 +120,12 @@ class MatcherNode:
             rospy.Service("matchToTemplate", MatchToTemplate, self.match_to_template)
         )
 
-    def _get_keypoints(self, id: int):
-        self.buffer.lock.acquire()
-        relevant = [x for x in self.buffer.buffer if x.id == id]
-        if len(relevant) != 1:
-            self.buffer.lock.release()
-            raise ValueError("Impossible!")
-        else:
-            img = copy.deepcopy(relevant[0].img)
-            self.buffer.lock.release()
-
-        kp = self.detector(img)
-
-        self.buffer.lock.acquire()
-        for x in self.buffer.buffer:
-            if x.id == id:
-                x.add_results(kp)
-        self.buffer.lock.release()
-
     def _add_img(self, img: np.ndarray) -> RegisterImageResponse:
         response = RegisterImageResponse()
         if len(self.buffer) < 2:
             self.idx += 1
-            content = ImageWrapper(self.idx, img)
-            self.buffer.append(content)
+            self.buffer.append(img)
             response.result = 0  # No issues
-
-            # Get keypoints
-            t = Thread(target=self._get_keypoints, args=(self.idx,))
-            t.start()
-            content.register_thread(t)
         else:
             response.result = 1  # Buffer overflow
         return response
@@ -197,26 +136,18 @@ class MatcherNode:
         elif len(self.buffer) > 2:
             logging.warning("More than 1 item in buffer. Picking first 2...")
 
-        self.buffer.lock.acquire()
-        content1 = self.buffer.buffer[0]
-        content2 = self.buffer.buffer[1]
-        self.buffer.lock.release()
+        img1 = self.buffer[0]
+        img2 = self.buffer[1]
 
-        content1.thread.join()  # type: ignore
-        content2.thread.join()  # type: ignore
+        # Get Keypoints
+        keypoints = self.detector.pairwise(img1, img2)
 
-        keypoints = {"ref": content1.results, "cur": content2.results}
+        # Get Matches
         matches = self.matcher(keypoints, num_keypoints)
 
-        self.buffer.lock.acquire()
-        content1 = self.buffer.buffer.pop(0)
-        content2 = self.buffer.buffer.pop(0)
-        self.buffer.lock.release()
+        self.buffer = []
 
         if self.debug:
-            img1 = content1.img
-            img2 = content2.img
-
             from tools.tools import plot_matches
 
             img = plot_matches(
