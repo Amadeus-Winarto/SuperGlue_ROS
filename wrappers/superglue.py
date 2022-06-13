@@ -64,16 +64,24 @@ class SuperGlueMatcher:
         # raise NotImplementedError
 
         if "torch" in kptdescs["cur"]:
-            data["scores0"] = kptdescs["ref"]["torch"]["scores"][0].unsqueeze(0)
-            data["keypoints0"] = kptdescs["ref"]["torch"]["keypoints"][0].unsqueeze(0)
-            data["descriptors0"] = kptdescs["ref"]["torch"]["descriptors"][0].unsqueeze(
-                0
+            data["scores0"] = (
+                kptdescs["ref"]["torch"]["scores"][0].unsqueeze(0).to(self.device)
+            )
+            data["keypoints0"] = (
+                kptdescs["ref"]["torch"]["keypoints"][0].unsqueeze(0).to(self.device)
+            )
+            data["descriptors0"] = (
+                kptdescs["ref"]["torch"]["descriptors"][0].unsqueeze(0).to(self.device)
             )
 
-            data["scores1"] = kptdescs["cur"]["torch"]["scores"][0].unsqueeze(0)
-            data["keypoints1"] = kptdescs["cur"]["torch"]["keypoints"][0].unsqueeze(0)
-            data["descriptors1"] = kptdescs["cur"]["torch"]["descriptors"][0].unsqueeze(
-                0
+            data["scores1"] = (
+                kptdescs["cur"]["torch"]["scores"][0].unsqueeze(0).to(self.device)
+            )
+            data["keypoints1"] = (
+                kptdescs["cur"]["torch"]["keypoints"][0].unsqueeze(0).to(self.device)
+            )
+            data["descriptors1"] = (
+                kptdescs["cur"]["torch"]["descriptors"][0].unsqueeze(0).to(self.device)
             )
         else:
             data["scores0"] = (
