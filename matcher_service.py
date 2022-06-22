@@ -275,7 +275,10 @@ class MatcherNode:
         )
         cv2_img: np.ndarray = self.bridge.compressed_imgmsg_to_cv2(img)
         cv2_img = white_balance(cv2_img)
-        cv2.imwrite(os.path.join(self.debug_path, "current.jpg"), cv2_img)
+        cv2.imwrite(
+            os.path.join(self.debug_path, f"current_{len(self.buffer) % 2}.jpg"),
+            cv2_img,
+        )
         return self._add_img(cv2_img)
 
     def clear_buffer(self, _: ClearBufferRequest) -> ClearBufferResponse:
@@ -330,7 +333,7 @@ class MatcherNode:
         if self.debug:
             from tools.tools import plot_matches
 
-            img1 = cv2.imread(os.path.join(self.debug_path, "current.jpg"))
+            img1 = cv2.imread(os.path.join(self.debug_path, "current_0.jpg"))
             img2 = cv2.imread(os.path.join(self.debug_path, "template.jpg"))
 
             img = plot_matches(
@@ -404,5 +407,11 @@ class MatcherNode:
 
 if __name__ == "__main__":
     DEBUG_MODE = True
-    matcher_node = MatcherNode(DEBUG_MODE)
+    matcher_node = MatcherNode(
+        DEBUG_MODE,
+        detector_config={
+            "cuda": True,
+        },
+        matcher_config={"cuda": True},
+    )
     rospy.spin()
