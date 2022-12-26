@@ -1,3 +1,6 @@
 [submodule "models/SuperGluePretrainedNetwork"]
 	path = models/SuperGluePretrainedNetwork
-	url = https://github.com/Amadeus-Winarto/SuperGluePretrainedNetwork.git
+	url = git@github.com:BumblebeeAS/SuperGluePretrainedNetwork.git
+[submodule "models/Coarse_LoFTR_TRT"]
+	path = models/Coarse_LoFTR_TRT
+	url = git@github.com:Kolkir/Coarse_LoFTR_TRT.git
