@@ -6,9 +6,10 @@ import torch
 from models.SuperGluePretrainedNetwork.models.superglue import SuperGlue
 
 from typing import Dict
+from .interface import MatcherWrapper
 
 
-class SuperGlueMatcher:
+class SuperGlueMatcher(MatcherWrapper):
     default_config = {
         "descriptor_dim": 256,
         "weights": "outdoor",
