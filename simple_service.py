@@ -266,21 +266,33 @@ class MatcherNode:
             pts1 = np.int32(np.array(kp1))
             pts2 = np.int32(np.array(kp2))
 
-            img = plot_matches(
-                cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY),
-                cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY),
-                results["ref_keypoints"][0:200],
-                results["cur_keypoints"][0:200],
-                results["match_score"][0:200],
-                layout="lr",
+            rospy.logwarn(
+                "Essential Matrix --- Note that E matrix algorithm in OpenCV cannot be used for planar cases"
             )
-
-            cv2.imwrite(os.path.join(self.debug_path, "debug_matches_py.jpg"), img)
-
-            # Do Homography here
-            print("Homography")
-            kp1 = results["ref_keypoints"]
-            kp2 = results["cur_keypoints"]
+            # Refer to https://www.robots.ox.ac.uk/~vgg/publications/1998/Torr98c/torr98c.pdf 
+            # for the different degenerate cases. In particular, case of dim(N) = 3
+            E, inliers = cv2.findEssentialMat(
+                pts1,
+                pts2,
+                focal=1.0,
+                pp=(0.0, 0.0),
+                method=cv2.USAC_MAGSAC,
+                prob=0.999,
+                threshold=5.0,
+            )
+            inliers = inliers > 0
+            print(E)
+            _, R, T, _ = cv2.recoverPose(
+                E, pts2, pts1
+            )  # Mapping from camera image to template
+            print(
+                "RPY : (deg.)",
+                -1
+                * Rlib.from_matrix(R).as_euler(
+                    "zyx", degrees=True
+                ),  # Yaw Pitch Roll in Camera Frame which is RDF -> Roll Pitch Yaw
+            )
+            print("Translation", T)
 
             rospy.logwarn("Homography --- For planar scenes ")
 
