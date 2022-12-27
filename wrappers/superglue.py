@@ -26,8 +26,8 @@ class SuperGlueMatcher(MatcherWrapper):
         self.config = self.default_config
         self.config = {**self.config, **config}
 
-        logging.info("SuperGlue matcher config: ")
-        logging.info(self.config)
+        logging.debug("SuperGlue matcher config: ")
+        logging.debug(self.config)
 
         self.device = (
             "cuda" if torch.cuda.is_available() and self.config["cuda"] else "cpu"
@@ -45,14 +45,14 @@ class SuperGlueMatcher(MatcherWrapper):
         ref_file = os.path.basename(path_).split(".")[0]
         ts_file = os.path.join(parent_dir, ref_file + ".zip")
 
-        logging.info("Creating SuperGlue matcher...")
-        if False: # os.path.isfile(ts_file):
+        logging.debug("Creating SuperGlue matcher...")
+        if False:  # os.path.isfile(ts_file):
             self.superglue = torch.jit.load(ts_file).eval().to(self.device)
         else:
             self.superglue = SuperGlue(self.config).eval().to(self.device)
 
     def preprocess(self, kptdescs: Dict) -> Dict:
-        logging.info("Prepare input data for superglue...")
+        logging.debug("Prepare input data for superglue...")
         data = {}
         data["image_size0"] = (
             torch.from_numpy(kptdescs["ref"]["image_size"]).float().to(self.device)
@@ -128,7 +128,7 @@ class SuperGlueMatcher(MatcherWrapper):
         return data
 
     def forward(self, data) -> Dict:
-        logging.info("Matching keypoints with superglue...")
+        logging.debug("Matching keypoints with superglue...")
         with torch.no_grad():
             pred: Dict = self.superglue(data)
         return pred

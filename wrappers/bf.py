@@ -16,7 +16,7 @@ class BfMatcher(MatcherWrapper):
         self.matcher = cv2.BFMatcher(normType=cv2.NORM_L1)
 
     def preprocess(self, kptdescs: Dict) -> Dict:
-        logging.info("Prepare input data for BF...")
+        logging.debug("Prepare input data for BF...")
         data = {}
 
         data["scores0"] = kptdescs["ref"]["scores"]
@@ -31,7 +31,7 @@ class BfMatcher(MatcherWrapper):
         return data
 
     def forward(self, data) -> Dict:
-        logging.info("Matching keypoints with superglue...")
+        logging.debug("Matching keypoints with superglue...")
         matches: List[Tuple[cv2.DMatch]] = self.matcher.knnMatch(
             data["descriptors0"], data["descriptors1"], k=2
         )

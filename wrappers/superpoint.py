@@ -31,8 +31,8 @@ class SuperPointDetector(DetectorWrapper):
 
         self.config = self.default_config
         self.config = {**self.config, **config}
-        logging.info("SuperPoint detector config: ")
-        logging.info(self.config)
+        logging.debug("SuperPoint detector config: ")
+        logging.debug(self.config)
 
         self.device = (
             "cuda" if torch.cuda.is_available() and self.config["cuda"] else "cpu"
@@ -42,7 +42,7 @@ class SuperPointDetector(DetectorWrapper):
         ref_file = os.path.basename(path_).split(".")[0]
         ts_file = os.path.join(parent_dir, ref_file + ".zip")
 
-        logging.info("Creating SuperPoint detector...")
+        logging.debug("Creating SuperPoint detector...")
         if False:  # os.path.isfile(ts_file):
             self.superpoint = torch.jit.load(ts_file).eval().to(self.device)
         else:
