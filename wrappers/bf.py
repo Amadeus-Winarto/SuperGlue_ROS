@@ -5,8 +5,10 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
+from .interface import MatcherWrapper
 
-class BfMatcher:
+
+class BfMatcher(MatcherWrapper):
     def __init__(self, config=None) -> None:
         if config is not None:
             raise NotImplementedError
