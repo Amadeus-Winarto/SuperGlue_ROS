@@ -10,8 +10,10 @@ from tools.tools import image2tensor
 
 from typing import Dict
 
+from .interface import DetectorWrapper
 
-class SuperPointDetector(object):
+
+class SuperPointDetector(DetectorWrapper):
     default_config = {
         "descriptor_dim": 256,
         "nms_radius": 4,
