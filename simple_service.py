@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import time
 from scipy.spatial.transform import Rotation as Rlib
+from enum import Enum
 import numpy as np
-import logging
+import time
 import cv2
 import os
 
@@ -10,6 +11,11 @@ import rospy
 from cv_bridge import CvBridge
 
 from typing import Callable, List, Dict, Union
+from wrappers.interface import (
+    DetectorWrapper,
+    MatcherWithoutDetectorWrapper,
+    MatcherWrapper,
+)
 from wrappers.bf import BfMatcher
 from wrappers.superglue import SuperGlueMatcher
 from wrappers.superpoint import SuperPointDetector
@@ -35,28 +41,40 @@ class MatcherNode:
     def __init__(
         self,
         is_debug=False,
-        use_superglue=True,
         node_name="matcher",
-        detector_config: Union[Dict, None] = None,
-        matcher_config: Union[Dict, None] = None,
+        detector: Union[DetectorWrapper, None] = None,
+        matcher: Union[MatcherWrapper, MatcherWithoutDetectorWrapper, None] = None,
     ):
-        rospy.init_node(node_name)
+        rospy.init_node(
+            node_name, anonymous=True, log_level=rospy.DEBUG if is_debug else rospy.INFO
+        )
         self.services: List[rospy.Service] = []
         self.bridge = CvBridge()
 
-        self.detector_config = detector_config
-        self.matcher_config = matcher_config
+        rospy.logdebug("Starting matcher and detector setup...")
+        self.matcher = matcher if matcher is not None else SuperGlueMatcher()
 
-        self.detector = SuperPointDetector(self.detector_config)
-
-        if use_superglue:
-            self.matcher = SuperGlueMatcher(self.matcher_config)
+        self.use_detector = not isinstance(self.matcher, MatcherWithoutDetectorWrapper)
+        if self.use_detector:
+            self.detector = detector if detector is not None else SuperPointDetector()
+            rospy.logwarn(
+                "Provided matcher requires a keypoint detector, but no detector passed... \
+                Using SuperPoint as default detector"
+            )
         else:
-            self.matcher = BfMatcher(self.matcher_config)
+            self.detector = None
+            if detector is not None:
+                rospy.logwarn(
+                    "Provided matcher does not require a keypoint detector, but a detector was passed... \
+                    Ignoring the detector"
+                )
+        rospy.logdebug("Matcher and detector setup complete")
 
+        rospy.logdebug("Setting up buffer...")
         self.buffer = []
         self.idx = 0
 
+        rospy.logdebug("Setting up path...")
         self.path = os.path.dirname(os.path.abspath(__file__))
         self.debug = is_debug
         if is_debug:
@@ -64,12 +82,22 @@ class MatcherNode:
             if not os.path.isdir(self.debug_path):
                 os.mkdir(self.debug_path)
 
+        rospy.logdebug("Setting template folder...")
         template_path = os.path.join(self.path, "templates")
         self.available_templates = [
             os.path.join(template_path, x) for x in os.listdir(template_path)
         ]
 
+        rospy.logwarn("Warming up models")
+        start = rospy.Time.now()
+        self.warmup()
+        end = rospy.Time.now()
+        rospy.logdebug("Warmup complete in {} seconds".format((end - start).to_sec()))
+
+        rospy.logdebug("Setting up service...")
         self.offer_services()
+
+        rospy.logwarn("Serices offered!")
 
     def offer_services(self):
         # Add the services here
@@ -100,22 +128,29 @@ class MatcherNode:
         if len(self.buffer) < 2:
             raise ValueError("No matching possible!")
         elif len(self.buffer) > 2:
-            logging.warning("More than 1 item in buffer. Picking first 2...")
+            rospy.logwarn("More than 1 item in buffer. Picking first 2...")
 
         img1 = self.buffer[0]
         img2 = self.buffer[1]
 
-        # Get Keypoints
-        start = time.time()
-        keypoints = self.detector.pairwise(img1, img2)
-        end = time.time()
-        print("Time taken for detector: ", end - start)
+        if self.use_detector:
+            # Get Keypoints
+            start = time.time()
+            keypoints = self.detector.pairwise(img1, img2)
+            end = time.time()
+            rospy.logdebug(f"Time taken for detector: {end - start}")
 
-        # Get Matches
-        start = time.time()
-        matches = self.matcher(keypoints, num_keypoints)
-        end = time.time()
-        print("Time taken for matcher: ", end - start)
+            # Get Matches
+            start = time.time()
+            matches = self.matcher(keypoints, num_keypoints)
+            end = time.time()
+            rospy.logdebug(f"Time taken for matcher: {end - start}")
+
+        else:
+            start = time.time()
+            matches = self.matcher(img1, img2, num_keypoints)
+            end = time.time()
+            rospy.logdebug(f"Time taken for matcher: {end - start}")
 
         self.buffer = []
 
@@ -161,11 +196,18 @@ class MatcherNode:
     def register_img(self, req: RegisterImageRequest) -> RegisterImageResponse:
         topic_name = req.topic_name
         img: CompressedImage = rospy.wait_for_message(
-            topic_name, CompressedImage, timeout=2
+            topic_name, CompressedImage, timeout=1
+        )  # type: ignore
+
+        cv2_img: np.ndarray = self.bridge.compressed_imgmsg_to_cv2(
+            img,
         )
-        cv2_img: np.ndarray = self.bridge.compressed_imgmsg_to_cv2(img)
-        cv2_img = white_balance(cv2_img)
-        cv2.imwrite(os.path.join(self.debug_path, "current.jpg"), cv2_img)
+
+        if self.debug:
+            cv2.imwrite(
+                os.path.join(self.debug_path, f"current_{len(self.buffer) % 2}.jpg"),
+                cv2_img,
+            )
         return self._add_img(cv2_img)
 
     def clear_buffer(self, _: ClearBufferRequest) -> ClearBufferResponse:
@@ -195,8 +237,8 @@ class MatcherNode:
         if template_name == "":
             raise ValueError("template_name is empty!")
 
-        print(num_keypoints)
-        print(template_name)
+        rospy.loginfo(f"Num. Keypoints: {num_keypoints}")
+        rospy.loginfo(f"Matching with template: {template_name}")
 
         relevant_templates = sorted(
             list(filter(lambda x: template_name in x, self.available_templates))
@@ -207,7 +249,7 @@ class MatcherNode:
             return resp
 
         relevant_template_path = relevant_templates[0]
-        print(f"Using {relevant_template_path}")
+        rospy.logdebug(f"Using {relevant_template_path}")
         cv2_img: np.ndarray = cv2.imread(relevant_template_path)
         cv2_img = white_balance(cv2_img)
         if self.debug:
@@ -218,10 +260,11 @@ class MatcherNode:
         results = self._infer_matches(num_keypoints)
 
         if self.debug:
-            from tools.tools import plot_matches
+            kp1 = results["ref_keypoints"]  # Camera image
+            kp2 = results["cur_keypoints"]  # Template
 
-            img1 = cv2.imread(os.path.join(self.debug_path, "current.jpg"))
-            img2 = cv2.imread(os.path.join(self.debug_path, "template.jpg"))
+            pts1 = np.int32(np.array(kp1))
+            pts2 = np.int32(np.array(kp2))
 
             img = plot_matches(
                 cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY),
@@ -239,17 +282,24 @@ class MatcherNode:
             kp1 = results["ref_keypoints"]
             kp2 = results["cur_keypoints"]
 
-            pts1 = np.int32(np.array(kp1))
-            pts2 = np.int32(np.array(kp2))
+            rospy.logwarn("Homography --- For planar scenes ")
 
-            M, _ = cv2.findHomography(pts2, pts1, cv2.RANSAC, 5.0)
+            M, inliers = cv2.findHomography(
+                pts1, pts2, cv2.USAC_MAGSAC, 5.0
+            )  # Mapping from camera image to template
+            inliers = inliers > 0
             print(M)
+
+            img1 = cv2.imread(os.path.join(self.debug_path, "current_0.jpg"))
+            img2 = cv2.imread(os.path.join(self.debug_path, "template.jpg"))
 
             h, w, _ = img2.shape
             pts = np.float32([[1, 1], [w - 1, 1], [w - 1, h - 1], [1, h - 1]]).reshape(
                 -1, 1, 2
             )
-            dst = cv2.perspectiveTransform(pts, M)
+            dst = cv2.perspectiveTransform(
+                pts, np.linalg.inv(M)
+            )  # Inverse because we want template -> camera mapping
             img_lines = cv2.polylines(img1, [np.int32(dst)], True, 255, 3, cv2.LINE_AA)
             cv2.imwrite(
                 os.path.join(self.debug_path, "debug_keypoints_py.jpg"), img_lines
@@ -260,12 +310,11 @@ class MatcherNode:
             )
 
             for i in range(len(Rs)):
-
                 if Ns[i].T.dot(np.array([[0], [0], [1]]))[0][0] < 0:
                     print(i)
                     print(
-                        "YPR : (deg.)",
-                        -1 * Rlib.from_matrix(Rs[i]).as_euler("yxz", degrees=True),
+                        "RPY : (deg.)",
+                        -1 * Rlib.from_matrix(Rs[i]).as_euler("zyx", degrees=True),
                     )
                     print("Translation", Ts[i][:, 0])
                     print("Normal", Ns[i][:, 0])
@@ -274,9 +323,75 @@ class MatcherNode:
 
         return self._to_correct_format(results, lambda: MatchToTemplateResponse())  # type: ignore
 
+    def warmup(self):
+        debug_state = self.debug
+        self.debug = False
+
+        # Constants for warmup
+        num_keypoints = 1000
+        width = 720
+        height = 640
+        channel = 3
+
+        if self.use_detector:
+            for _ in range(10):
+                cv2_img: np.ndarray = np.random.rand(width, height, channel).astype(
+                    np.float32
+                )
+                cv2_img = white_balance(cv2_img)
+                self._add_img(cv2_img)
+
+                cv2_img: np.ndarray = np.random.rand(width, height, channel).astype(
+                    np.float32
+                )
+                cv2_img = white_balance(cv2_img)
+                self._add_img(cv2_img)
+
+                self._infer_matches(num_keypoints)
+        else:
+            for _ in range(10):
+                img1: np.ndarray = np.random.rand(width, height, channel).astype(
+                    np.float32
+                )
+                img2: np.ndarray = np.random.rand(width, height, channel).astype(
+                    np.float32
+                )
+
+                self.matcher(img1, img2, num_keypoints)
+
+        self.debug = debug_state
+
+
+class Mode(Enum):
+    BRUTE_FORCE = 0
+    SUPERGLUE = 1
 
 if __name__ == "__main__":
+    # Configuration
     DEBUG_MODE = True
-    matcher_node = MatcherNode(DEBUG_MODE)
-    print("RUNNING")
+    detector_config = {
+        "cuda": True,
+    }
+    matcher_mode: Mode = Mode.SUPERGLUE
+
+    # Setup matcher
+    matcher = None
+    if matcher_mode == Mode.SUPERGLUE:
+        matcher = SuperGlueMatcher(matcher_config)
+    elif matcher_mode == Mode.BRUTE_FORCE:
+        matcher = BfMatcher(matcher_config)
+    else:
+        raise ValueError("Invalid matcher mode")
+
+    # Setup detector
+    detector = None
+    if isinstance(matcher, MatcherWrapper):
+        detector = SuperPointDetector(detector_config)
+
+    matcher_node = MatcherNode(
+        DEBUG_MODE,
+        detector=detector,
+        matcher=matcher,
+    )
+
     rospy.spin()
