@@ -378,6 +378,8 @@ class Mode(Enum):
     BRUTE_FORCE = 0
     SUPERGLUE = 1
     COARSE_LOFTR = 2
+    LOFTR = 3
+
 
 if __name__ == "__main__":
     # Configuration
@@ -401,6 +403,8 @@ if __name__ == "__main__":
         matcher = BfMatcher(matcher_config)
     elif matcher_mode == Mode.COARSE_LOFTR:
         matcher = CoarseLoftrMatcher(matcher_config)
+    elif matcher_mode == Mode.LOFTR:
+        matcher = LoftrMatcher(matcher_config)
     else:
         raise ValueError("Invalid matcher mode")
 
