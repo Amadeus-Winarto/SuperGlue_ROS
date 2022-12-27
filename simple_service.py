@@ -377,6 +377,7 @@ class MatcherNode:
 class Mode(Enum):
     BRUTE_FORCE = 0
     SUPERGLUE = 1
+    COARSE_LOFTR = 2
 
 if __name__ == "__main__":
     # Configuration
@@ -385,6 +386,12 @@ if __name__ == "__main__":
         "cuda": True,
     }
     matcher_mode: Mode = Mode.SUPERGLUE
+    matcher_config = {
+        "cuda": True,
+        "weights": (
+            "outdoor" if matcher_mode != Mode.COARSE_LOFTR else "LoFTR_teacher"
+        ),
+    }
 
     # Setup matcher
     matcher = None
@@ -392,6 +399,8 @@ if __name__ == "__main__":
         matcher = SuperGlueMatcher(matcher_config)
     elif matcher_mode == Mode.BRUTE_FORCE:
         matcher = BfMatcher(matcher_config)
+    elif matcher_mode == Mode.COARSE_LOFTR:
+        matcher = CoarseLoftrMatcher(matcher_config)
     else:
         raise ValueError("Invalid matcher mode")
 
